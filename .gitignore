@@ -2,3 +2,5 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+app/data/runtime_events.db
+app/data/runtime_notifications.db
