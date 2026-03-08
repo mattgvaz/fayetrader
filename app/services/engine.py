@@ -73,3 +73,26 @@ class TradingEngine:
             "positions": sum(1 for p in self.portfolio.positions.values() if p.qty > 0),
             "decisions": len(self.decision_log),
         }
+
+    def state(self, decision_limit: int = 25) -> dict[str, object]:
+        marks = self.market.snapshot(settings.symbol_universe)
+        open_positions: list[dict[str, float | int | str]] = []
+        for symbol, pos in self.portfolio.positions.items():
+            if pos.qty <= 0:
+                continue
+            mark = marks.get(symbol, pos.avg_cost)
+            open_positions.append(
+                {
+                    "symbol": symbol,
+                    "qty": pos.qty,
+                    "avg_cost": pos.avg_cost,
+                    "mark": mark,
+                    "unrealized_pnl": (mark - pos.avg_cost) * pos.qty,
+                }
+            )
+        return {
+            "mode": settings.mode,
+            "metrics": self.metrics(),
+            "positions": open_positions,
+            "recent_decisions": self.decision_log[-decision_limit:],
+        }

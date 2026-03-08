@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.core.config import settings
 from app.services.engine import TradingEngine
@@ -31,3 +35,79 @@ def decisions(limit: int = 50) -> list[dict[str, str | float | int]]:
     if limit < 1:
         raise HTTPException(status_code=400, detail="limit must be >= 1")
     return engine.decision_log[-limit:]
+
+
+@router.get("/state")
+def state(limit: int = 25) -> dict[str, object]:
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    return engine.state(decision_limit=limit)
+
+
+@router.get("/stream")
+async def stream(interval_ms: int = 1500) -> StreamingResponse:
+    if interval_ms < 250:
+        raise HTTPException(status_code=400, detail="interval_ms must be >= 250")
+
+    async def event_stream() -> object:
+        while True:
+            payload = json.dumps(engine.state(decision_limit=25))
+            yield f"event: state\ndata: {payload}\n\n"
+            await asyncio.sleep(interval_ms / 1000)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+def dashboard() -> str:
+    return """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>FayeTrader Dashboard</title>
+    <link rel="stylesheet" href="/static/dashboard.css">
+  </head>
+  <body>
+    <main class="layout">
+      <header class="status">
+        <h1>FayeTrader</h1>
+        <p id="mode-pill" class="pill">mode: practice</p>
+        <p id="stream-pill" class="pill muted">stream: connecting</p>
+      </header>
+      <section class="grid">
+        <article class="card">
+          <h2>Account</h2>
+          <div class="kpis">
+            <p>Cash <strong id="cash">$0.00</strong></p>
+            <p>Equity <strong id="equity">$0.00</strong></p>
+            <p>Realized PnL <strong id="realized">$0.00</strong></p>
+            <p>Drawdown <strong id="drawdown">0.00%</strong></p>
+          </div>
+        </article>
+        <article class="card">
+          <h2>Risk Controls</h2>
+          <form id="controls" class="controls">
+            <label>Daily Budget <input type="number" value="100000" disabled></label>
+            <label>Max Daily Loss % <input type="number" value="3" disabled></label>
+            <label>Max Position % <input type="number" value="10" disabled></label>
+            <p class="note">Control persistence is planned in upcoming milestone.</p>
+          </form>
+        </article>
+        <article class="card">
+          <h2>Open Positions</h2>
+          <table id="positions">
+            <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Mark</th><th>Unrealized</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </article>
+        <article class="card">
+          <h2>Decision Timeline</h2>
+          <ul id="timeline" class="timeline"></ul>
+        </article>
+      </section>
+    </main>
+    <script src="/static/dashboard.js"></script>
+  </body>
+</html>
+"""
