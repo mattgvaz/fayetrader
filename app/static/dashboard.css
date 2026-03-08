@@ -104,6 +104,16 @@ body {
   background: #f8fafc;
 }
 
+.controls button {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .note {
   margin: 0;
   color: var(--muted);
@@ -136,6 +146,40 @@ td {
 .timeline li {
   border-left: 2px solid var(--border);
   padding-left: 0.6rem;
+}
+
+.timeline .headline {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.timeline .status {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+}
+
+.timeline .status-filled {
+  color: var(--accent);
+  border-color: rgba(11, 122, 117, 0.35);
+  background: rgba(11, 122, 117, 0.08);
+}
+
+.timeline .status-blocked {
+  color: var(--danger);
+  border-color: rgba(180, 35, 24, 0.35);
+  background: rgba(180, 35, 24, 0.08);
+}
+
+.timeline .status-skipped {
+  color: #6b7280;
+  border-color: rgba(107, 114, 128, 0.35);
+  background: rgba(107, 114, 128, 0.08);
 }
 
 .timeline .meta {

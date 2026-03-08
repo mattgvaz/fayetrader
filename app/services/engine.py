@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.agents.trading_agent import TradingAgent
 from app.brokers.paper import PaperBroker
 from app.core.config import settings
 from app.data.market import MarketDataAdapter
+from app.models.controls import RiskControls, RiskControlsUpdate
 from app.models.types import DecisionAction, Order, OrderType, Side
 from app.services.portfolio import Portfolio
 from app.services.risk import RiskEngine
@@ -19,9 +20,15 @@ class TradingEngine:
         self.broker = PaperBroker()
         self.portfolio = Portfolio(starting_cash=settings.starting_cash, cash=settings.starting_cash)
         self.decision_log: list[dict[str, str | float | int]] = []
+        self.controls = RiskControls(
+            daily_budget=settings.starting_cash,
+            max_position_pct=settings.max_position_pct,
+            max_daily_loss_pct=settings.max_daily_loss_pct,
+            max_orders_per_minute=settings.max_orders_per_minute,
+        )
 
     def run_once(self, symbol: str) -> dict[str, str | float | int]:
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         tick = self.market.latest(symbol)
         decision = self.agent.decide(symbol=symbol, mark_price=tick.price)
 
@@ -39,7 +46,16 @@ class TradingEngine:
             self.decision_log.append(record)
             return record
 
-        allowed, gate_reason = self.risk.allow(decision, self.portfolio, tick.price, now)
+        allowed, gate_reason = self.risk.allow(
+            decision,
+            self.portfolio,
+            tick.price,
+            now,
+            max_position_pct=self.controls.max_position_pct,
+            max_daily_loss_pct=self.controls.max_daily_loss_pct,
+            max_orders_per_minute=self.controls.max_orders_per_minute,
+            daily_budget=self.controls.daily_budget,
+        )
         if not allowed:
             record["status"] = "blocked"
             record["risk_reason"] = gate_reason
@@ -92,7 +108,16 @@ class TradingEngine:
             )
         return {
             "mode": settings.mode,
+            "controls": self.controls.model_dump(),
             "metrics": self.metrics(),
             "positions": open_positions,
             "recent_decisions": self.decision_log[-decision_limit:],
         }
+
+    def get_controls(self) -> RiskControls:
+        return self.controls.model_copy()
+
+    def update_controls(self, update: RiskControlsUpdate) -> RiskControls:
+        payload = update.model_dump(exclude_none=True)
+        self.controls = self.controls.model_copy(update=payload)
+        return self.controls

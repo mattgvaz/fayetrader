@@ -20,6 +20,7 @@ class Portfolio:
     realized_pnl: float = 0.0
     equity_peak: float = 0.0
     daily_realized: dict[date, float] = field(default_factory=dict)
+    daily_buy_notional: dict[date, float] = field(default_factory=dict)
 
     def apply_fill(self, fill: Fill) -> None:
         pos = self.positions.setdefault(fill.symbol, Position())
@@ -34,6 +35,8 @@ class Portfolio:
                 pos.avg_cost = ((pos.qty * pos.avg_cost) + gross) / new_qty
                 pos.qty = new_qty
             self.cash -= gross
+            d = fill.ts.date()
+            self.daily_buy_notional[d] = self.daily_buy_notional.get(d, 0.0) + gross
         else:
             sold_qty = min(fill.qty, max(0, pos.qty))
             pnl = sold_qty * (fill.price - pos.avg_cost)
