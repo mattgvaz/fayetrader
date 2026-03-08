@@ -57,3 +57,14 @@ def test_stream_endpoint_validates_interval() -> None:
     client = TestClient(app)
     res = client.get("/api/stream?interval_ms=100")
     assert res.status_code == 400
+
+
+def test_run_symbol_endpoint_records_decision() -> None:
+    client = TestClient(app)
+    before = client.get("/api/state").json()["metrics"]["decisions"]
+    res = client.post("/api/run/AAPL")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["symbol"] == "AAPL"
+    after = client.get("/api/state").json()["metrics"]["decisions"]
+    assert after == before + 1

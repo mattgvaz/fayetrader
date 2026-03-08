@@ -125,6 +125,20 @@ def dashboard() -> str:
           </form>
         </article>
         <article class="card">
+          <h2>Agent Actions</h2>
+          <form id="agent-actions" class="controls">
+            <label>Symbol
+              <select id="run-symbol">
+                <option value="AAPL">AAPL</option>
+                <option value="MSFT">MSFT</option>
+                <option value="SPY">SPY</option>
+              </select>
+            </label>
+            <button id="run-once" type="submit">Run Once</button>
+            <p id="run-status" class="note">Run a single decision cycle for the selected symbol.</p>
+          </form>
+        </article>
+        <article class="card">
           <h2>Open Positions</h2>
           <table id="positions">
             <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Mark</th><th>Unrealized</th></tr></thead>

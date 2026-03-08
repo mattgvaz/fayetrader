@@ -85,6 +85,22 @@ async function saveControls(ev) {
   if (next.ok) render(await next.json());
 }
 
+async function runOnce(ev) {
+  ev.preventDefault();
+  const symbol = document.getElementById("run-symbol").value;
+  const status = document.getElementById("run-status");
+  status.textContent = `Running ${symbol}...`;
+  const res = await fetch(`/api/run/${symbol}`, { method: "POST" });
+  if (!res.ok) {
+    status.textContent = `Run failed for ${symbol}.`;
+    return;
+  }
+  const body = await res.json();
+  status.textContent = `${symbol}: ${body.action} (${body.status})`;
+  const next = await fetch("/api/state");
+  if (next.ok) render(await next.json());
+}
+
 function bootStream() {
   const streamPill = document.getElementById("stream-pill");
   const es = new EventSource("/api/stream");
@@ -103,3 +119,4 @@ function bootStream() {
 hydrate();
 bootStream();
 document.getElementById("controls").addEventListener("submit", saveControls);
+document.getElementById("agent-actions").addEventListener("submit", runOnce);

@@ -104,6 +104,13 @@ body {
   background: #f8fafc;
 }
 
+.controls select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  background: #f8fafc;
+}
+
 .controls button {
   border: 1px solid var(--accent);
   background: var(--accent);
