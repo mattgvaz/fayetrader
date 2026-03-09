@@ -29,12 +29,19 @@ const appState = {
   alerts: [],
   notifications: [],
   dispatches: [],
+  notificationMetrics: null,
   notificationChannels: {
     in_app_enabled: true,
     webhook_enabled: false,
     webhook_url: "",
     email_enabled: false,
     email_to: "",
+    throttle_window_minutes: 10,
+    max_notifications_per_window: 3,
+    dedupe_window_minutes: 20,
+    quiet_hours_enabled: false,
+    quiet_hours_start: "22:00",
+    quiet_hours_end: "07:00",
   },
   hotOpportunityThreshold: 1.25,
   lastEventTs: null,
@@ -516,6 +523,8 @@ function renderNotificationCenter(state) {
   }
   const feed = document.getElementById("notification-feed");
   const dispatchFeed = document.getElementById("dispatch-feed");
+  const suppressionSummary = document.getElementById("notification-suppression-summary");
+  const metricsSummary = document.getElementById("notification-metrics-summary");
   feed.innerHTML = "";
   dispatchFeed.innerHTML = "";
 
@@ -543,6 +552,7 @@ function renderNotificationCenter(state) {
     const li = document.createElement("li");
     li.textContent = "No external dispatch attempts yet.";
     dispatchFeed.appendChild(li);
+    suppressionSummary.textContent = "Suppression summary: none in recent dispatch activity.";
   } else {
     appState.dispatches.slice(0, 8).forEach((dispatch) => {
       const li = document.createElement("li");
@@ -553,6 +563,23 @@ function renderNotificationCenter(state) {
       `;
       dispatchFeed.appendChild(li);
     });
+    const suppressed = appState.dispatches.filter((dispatch) => String(dispatch.status || "").startsWith("suppressed_"));
+    const quietCount = suppressed.filter((dispatch) => dispatch.status === "suppressed_quiet_hours").length;
+    const throttleCount = suppressed.filter((dispatch) => dispatch.status === "suppressed_throttle").length;
+    const dedupeCount = suppressed.filter((dispatch) => dispatch.status === "suppressed_dedupe").length;
+    const total = suppressed.length;
+    suppressionSummary.textContent =
+      total > 0
+        ? `Suppression summary: ${total} recent (${quietCount} quiet-hours, ${throttleCount} throttle, ${dedupeCount} dedupe).`
+        : "Suppression summary: none in recent dispatch activity.";
+  }
+
+  const metrics = appState.notificationMetrics;
+  if (!metrics || !metrics.dispatch_counts) {
+    metricsSummary.textContent = "24h dispatch metrics: no activity yet.";
+  } else {
+    metricsSummary.textContent =
+      `24h dispatch metrics: delivered ${Number(metrics.webhook_delivered || 0)}, failed ${Number(metrics.webhook_failed || 0)}, suppressed ${Number(metrics.suppressed_total || 0)}.`;
   }
 }
 
@@ -1192,12 +1219,26 @@ function applyNotificationChannels(channels) {
     webhook_url: String(channels.webhook_url || ""),
     email_enabled: Boolean(channels.email_enabled),
     email_to: String(channels.email_to || ""),
+    throttle_window_minutes: Number(channels.throttle_window_minutes || 10),
+    max_notifications_per_window: Number(channels.max_notifications_per_window || 3),
+    dedupe_window_minutes: Number(channels.dedupe_window_minutes || 20),
+    quiet_hours_enabled: Boolean(channels.quiet_hours_enabled),
+    quiet_hours_start: String(channels.quiet_hours_start || "22:00"),
+    quiet_hours_end: String(channels.quiet_hours_end || "07:00"),
   };
   document.getElementById("notify-in-app").checked = appState.notificationChannels.in_app_enabled;
   document.getElementById("notify-webhook-enabled").checked = appState.notificationChannels.webhook_enabled;
   document.getElementById("notify-webhook-url").value = appState.notificationChannels.webhook_url;
   document.getElementById("notify-email-enabled").checked = appState.notificationChannels.email_enabled;
   document.getElementById("notify-email-to").value = appState.notificationChannels.email_to;
+  document.getElementById("notify-throttle-window-minutes").value = String(
+    appState.notificationChannels.throttle_window_minutes
+  );
+  document.getElementById("notify-max-per-window").value = String(appState.notificationChannels.max_notifications_per_window);
+  document.getElementById("notify-dedupe-window-minutes").value = String(appState.notificationChannels.dedupe_window_minutes);
+  document.getElementById("notify-quiet-hours-enabled").checked = appState.notificationChannels.quiet_hours_enabled;
+  document.getElementById("notify-quiet-start").value = appState.notificationChannels.quiet_hours_start;
+  document.getElementById("notify-quiet-end").value = appState.notificationChannels.quiet_hours_end;
 }
 
 async function loadNotificationChannels() {
@@ -1218,6 +1259,12 @@ async function saveNotificationChannels(ev) {
     webhook_url: document.getElementById("notify-webhook-url").value.trim(),
     email_enabled: document.getElementById("notify-email-enabled").checked,
     email_to: document.getElementById("notify-email-to").value.trim(),
+    throttle_window_minutes: Number(document.getElementById("notify-throttle-window-minutes").value),
+    max_notifications_per_window: Number(document.getElementById("notify-max-per-window").value),
+    dedupe_window_minutes: Number(document.getElementById("notify-dedupe-window-minutes").value),
+    quiet_hours_enabled: document.getElementById("notify-quiet-hours-enabled").checked,
+    quiet_hours_start: document.getElementById("notify-quiet-start").value,
+    quiet_hours_end: document.getElementById("notify-quiet-end").value,
   };
   const res = await fetch("/api/notifications/channels", {
     method: "PUT",
@@ -1248,6 +1295,13 @@ async function loadDispatches() {
   renderNotificationCenter(appState.lastSnapshot);
 }
 
+async function loadNotificationMetrics() {
+  const res = await fetch("/api/notifications/metrics?window_hours=24");
+  if (!res.ok) return;
+  appState.notificationMetrics = await res.json();
+  renderNotificationCenter(appState.lastSnapshot);
+}
+
 async function acknowledgeNotification(notificationId) {
   const res = await fetch(`/api/notifications/${notificationId}/ack`, { method: "POST" });
   if (!res.ok) {
@@ -1266,6 +1320,22 @@ async function snoozeNotification(notificationId, minutes = 30) {
   }
   await loadNotifications();
   setNotificationStatus(`Notification snoozed for ${minutes} minutes.`);
+}
+
+async function sendNotificationTest() {
+  const res = await fetch("/api/notifications/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Manual test alert from dashboard." }),
+  });
+  if (!res.ok) {
+    setNotificationStatus("Unable to send test alert.", true);
+    return;
+  }
+  await loadNotifications();
+  await loadDispatches();
+  await loadNotificationMetrics();
+  setNotificationStatus("Test alert sent.");
 }
 
 async function saveOpportunityControls(ev) {
@@ -1300,6 +1370,7 @@ async function replayRecentEvents() {
   renderAlertFeed();
   await loadNotifications();
   await loadDispatches();
+  await loadNotificationMetrics();
 }
 
 function handleIncomingEvent(event) {
@@ -1315,6 +1386,7 @@ function handleIncomingEvent(event) {
     renderAlertFeed();
     loadNotifications();
     loadDispatches();
+    loadNotificationMetrics();
   }
   if (event.event_type === "state_snapshot") {
     render(event.data || {});
@@ -1515,6 +1587,7 @@ loadOpportunityControls();
 loadNotificationChannels();
 replayRecentEvents();
 appState.staleTimerId = window.setInterval(refreshStaleStatus, 2000);
+document.getElementById("notification-send-test").addEventListener("click", sendNotificationTest);
 document.getElementById("notification-feed").addEventListener("click", (ev) => {
   const ackBtn = ev.target.closest(".notif-ack");
   if (ackBtn) {

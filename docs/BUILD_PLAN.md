@@ -1,6 +1,6 @@
 # FayeTrader Build Plan (Living)
 
-Last updated: 2026-03-08
+Last updated: 2026-03-09
 Target POC launch: 2026-04-17 (tentative)
 Status legend: `not_started` | `in_progress` | `blocked` | `done`
 
@@ -29,7 +29,7 @@ Acceptance criteria:
 - UI is usable on laptop and phone widths.
 
 ### M2: Real-Time Event Model + Backend/UI Wiring (Week of 2026-03-16)
-Status: `in_progress`
+Status: `done`
 Owner: `unassigned`
 
 Deliverables:
@@ -38,7 +38,7 @@ Deliverables:
 - Live updates in dashboard timeline and key metrics panels.
 - Live intraday research monitor surfacing newly ranked trade candidates.
 - Real-time catalyst ingestion pipeline (news/chatter/events) with AI-disruption tagging.
-- Hot-opportunity notification channel (at minimum in-app + webhook/email scaffold).
+- Hot-opportunity notification channel with live webhook dispatch, retries/backoff, and observability metrics.
 
 Acceptance criteria:
 - New decisions/fills appear in UI without manual refresh.
@@ -47,7 +47,7 @@ Acceptance criteria:
 - User receives an immediate alert when opportunity score crosses configured threshold while away from dashboard.
 
 ### M3: Strategy Lab + A/B Experiment Harness (Week of 2026-03-23)
-Status: `not_started`
+Status: `done`
 Owner: `unassigned`
 
 Deliverables:
@@ -62,7 +62,7 @@ Acceptance criteria:
 - Catalyst-driven opportunities are traceable from event -> impacted symbols -> decision outcome.
 
 ### M4: Persistence + Replay (Week of 2026-03-30)
-Status: `not_started`
+Status: `done`
 Owner: `unassigned`
 
 Deliverables:
@@ -79,7 +79,7 @@ Acceptance criteria:
 - Chat conversations survive restarts and can be searched/reopened by title or content.
 
 ### M5: Learning Loop + Strategy Adaptation (Week of 2026-04-06)
-Status: `not_started`
+Status: `in_progress`
 Owner: `unassigned`
 
 Deliverables:
@@ -87,14 +87,16 @@ Deliverables:
 - Build post-trade evaluator that scores trade quality and expected-vs-actual performance.
 - Build model update job (post-market) to adjust strategy weights/confidence.
 - Add guardrails to prevent unstable model jumps (caps, rollback, versioning).
+- Architecture decision record (ADR) evaluating single-orchestrator vs multi-agent design, informed by M1-M4 outcomes and OpenClaw-style concepts.
 
 Acceptance criteria:
 - Every closed position produces a learning sample.
 - Strategy scoring updates are visible, versioned, and attributable to data.
 - The agent uses updated strategy scoring on the next session.
+- M5 exit gate passed: documented go/no-go decision on adopting multi-agent architecture for post-M5 work, with rationale and migration scope if approved.
 
 ### M6: Alpaca Paper Integrations (Week of 2026-04-13)
-Status: `not_started`
+Status: `in_progress`
 Owner: `unassigned`
 
 Deliverables:
@@ -181,3 +183,13 @@ Acceptance criteria:
 - 2026-03-08: Routed in-app symbol hyperlinks to drilldown modal by default, with explicit "Open in Yahoo Finance" action from drilldown.
 - 2026-03-08: Began M2 with real-time typed event streaming (decision/risk/order/fill/metrics/alert/snapshot), live event bus + alert center UI, stream reconnect replay/staleness indicators, configurable hot-opportunity threshold, and SQLite event persistence groundwork.
 - 2026-03-08: Added notification-center backend/UI scaffold with channel settings (in-app/webhook/email), alert acknowledgments/snooze actions, and dispatch activity audit feed.
+- 2026-03-08: Added M5 architecture gate requiring a documented go/no-go decision on transitioning to multi-agent design after learning-loop validation.
+- 2026-03-09: Implemented notification throttles and quiet-hour controls (API + dashboard + suppression logic + tests) to reduce alert fatigue and spam.
+- 2026-03-09: Added intraday suppression summary widget showing recent quiet-hour/throttle filtered alerts from dispatch activity.
+- 2026-03-09: Added hot-opportunity notification dedupe (same-symbol time-window suppression) with runtime control and dispatch-log visibility.
+- 2026-03-09: Upgraded notification delivery with real webhook dispatch (timeout + retry/backoff), added send-test endpoint/button, and exposed 24h notification dispatch/suppression metrics.
+- 2026-03-09: Completed M2 acceptance by validating live alerting path beyond in-app feed, including delivery attempts and failure visibility.
+- 2026-03-09: Completed M3 scaffold with pluggable strategy registry, experiment assignment buckets, per-strategy attribution metrics endpoint, and decision-log strategy tagging.
+- 2026-03-09: Completed M4 with persistent run sessions + replay endpoints, decision audit trail persistence, SQLite-backed chat session/message durability (including content search), and learning-event persistence for closed trades.
+- 2026-03-09: Started M5 with persistent versioned strategy model state, guarded post-market update job (sample thresholds + capped deltas), rollback endpoint, and model-version-aware strategy selection.
+- 2026-03-09: Started M6 by adding Alpaca market-data and paper-broker adapters, adapter selection via environment config, adapter visibility endpoints, and live-mode safety guardrail defaults.

@@ -40,3 +40,16 @@ def test_learning_score_endpoint() -> None:
     body = res.json()
     assert "score" in body
     assert 0 <= body["score"] <= 1
+
+
+def test_learning_events_endpoint_shape() -> None:
+    client = TestClient(app)
+    for _ in range(3):
+        client.post("/api/run/AAPL")
+        client.post("/api/run/MSFT")
+        client.post("/api/run/SPY")
+    res = client.get("/api/learning/events?limit=25")
+    assert res.status_code == 200
+    body = res.json()
+    assert "events" in body
+    assert len(body["events"]) >= 1
