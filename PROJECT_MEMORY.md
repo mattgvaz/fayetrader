@@ -1,6 +1,6 @@
 # FayeTrader Project Memory (Charter)
 
-Last updated: 2026-03-07
+Last updated: 2026-03-08
 
 ## Vision
 Build an app where the user supervises an AI day-trading agent that researches off-hours and trades autonomously during market hours, starting in paper/practice mode.
@@ -17,6 +17,8 @@ Build an app where the user supervises an AI day-trading agent that researches o
 4. Trade feedback loop that learns from every closed position.
 5. Strong risk controls configurable by the user.
 6. Clear UX for oversight, intervention, and explanation.
+7. Real-time catalyst capture for volatility events (especially AI disruption) with fast opportunity ranking.
+8. Immediate user notifications for high-priority opportunities when user is away from the dashboard.
 
 ## Required User Controls
 - Daily trading budget limit.
@@ -24,6 +26,8 @@ Build an app where the user supervises an AI day-trading agent that researches o
 - Position sizing and order rate limits.
 - Optional market bias/direction instructions.
 - Pause/resume and kill switch.
+- Notification thresholds and channel preferences for urgent opportunity alerts.
+- Alert quiet-hours and rate-limit controls.
 
 ## Strategy Principles
 - Use proven day-trading methodologies as pluggable strategies.
@@ -31,6 +35,7 @@ Build an app where the user supervises an AI day-trading agent that researches o
 - Evaluate strategies by risk-adjusted metrics, not only raw return.
 - Keep strategy logic explainable per trade.
 - Learn from realized outcomes and adapt strategy weights over time.
+- Explicitly model catalyst-driven setups (news/event shocks) and map them to likely impacted symbols/sectors.
 
 ## Learning Feedback Loop
 - Every closed trade must emit a learning event with context and outcome.
@@ -51,6 +56,8 @@ Build an app where the user supervises an AI day-trading agent that researches o
 - Real-time visibility into positions, PnL, decisions, and risk events.
 - "Why this trade?" must be easy to answer from the UI.
 - Session replay should support debugging and trust-building.
+- If the user is not actively watching, urgent opportunities must still reach them via notifications.
+- Agent chat is a cross-cutting surface across workflows and should support multi-session continuity.
 
 ## Definition of POC Done
 - End-to-end loop works: signal -> risk gate -> order -> fill -> persist -> visualize.

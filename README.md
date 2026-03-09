@@ -30,8 +30,12 @@ Practice-mode-first proof of concept for a personal AI day-trading app.
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8082 --reload
 ```
+
+Canonical local URL for this project:
+- `http://localhost:8082/` (redirects to dashboard)
+- `http://localhost:8082/api/dashboard`
 
 ## Quick API checks
 ```bash
