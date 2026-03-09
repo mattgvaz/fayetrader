@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 app/data/runtime_events.db
 app/data/runtime_notifications.db
+app/data/runtime_chat.db
+app/data/runtime_learning.db
+app/data/runtime_model_state.db

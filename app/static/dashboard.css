@@ -313,7 +313,9 @@ body {
 }
 
 #notification-channels label input[type="text"],
-#notification-channels label input[type="email"] {
+#notification-channels label input[type="email"],
+#notification-channels label input[type="number"],
+#notification-channels label input[type="time"] {
   grid-column: 1 / -1;
 }
 

@@ -41,6 +41,28 @@ class NotificationChannelsPayload(BaseModel):
     webhook_url: str = ""
     email_enabled: bool = False
     email_to: str = ""
+    throttle_window_minutes: int = Field(default=10, ge=1, le=240)
+    max_notifications_per_window: int = Field(default=3, ge=1, le=50)
+    quiet_hours_enabled: bool = False
+    quiet_hours_start: str = "22:00"
+    quiet_hours_end: str = "07:00"
+    dedupe_window_minutes: int = Field(default=20, ge=1, le=240)
+
+
+class NotificationTestPayload(BaseModel):
+    message: str = Field(default="Manual test alert from dashboard.", min_length=1, max_length=500)
+
+
+class ModelUpdatePayload(BaseModel):
+    reason: str = Field(default="post_market_update", min_length=1, max_length=200)
+    min_samples_per_strategy: int = Field(default=2, ge=1, le=100)
+    max_delta_per_update: float = Field(default=0.08, ge=0.01, le=0.5)
+    lookback_limit: int = Field(default=500, ge=10, le=5000)
+
+
+class ModelRollbackPayload(BaseModel):
+    target_version_id: int = Field(ge=1)
+    reason: str = Field(default="manual_rollback", min_length=1, max_length=200)
 
 
 def _resolve_date_range(range_key: str, start_date: str | None, end_date: str | None) -> tuple[date, date]:
@@ -69,7 +91,20 @@ def _resolve_date_range(range_key: str, start_date: str | None, end_date: str | 
 
 @router.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "mode": settings.mode}
+    return {
+        "status": "ok",
+        "mode": settings.mode,
+        "market_data_adapter": engine.market_adapter_label,
+        "broker_adapter": engine.broker_adapter_label,
+    }
+
+
+@router.get("/adapters")
+def adapters() -> dict[str, str]:
+    return {
+        "market_data_adapter": engine.market_adapter_label,
+        "broker_adapter": engine.broker_adapter_label,
+    }
 
 
 @router.get("/metrics")
@@ -143,6 +178,27 @@ def recent_events(limit: int = 50) -> dict[str, object]:
     return {"events": engine.recent_events(limit=limit)}
 
 
+@router.get("/sessions")
+def sessions(limit: int = 30) -> dict[str, object]:
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    return {"sessions": engine.run_sessions(limit=limit)}
+
+
+@router.get("/sessions/{session_id}/replay")
+def replay_session(session_id: str, limit: int = 500) -> dict[str, object]:
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    return {"session_id": session_id, "events": engine.replay_session(session_id=session_id, limit=limit)}
+
+
+@router.get("/decisions/audit")
+def decision_audit(session_id: str | None = None, limit: int = 200) -> dict[str, object]:
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    return {"audit": engine.decision_audit(session_id=session_id, limit=limit)}
+
+
 @router.get("/opportunity-controls")
 def opportunity_controls() -> dict[str, float]:
     return {"threshold": engine.hot_opportunity_threshold}
@@ -190,6 +246,12 @@ def update_notification_channels(payload: NotificationChannelsPayload) -> dict[s
         webhook_url=payload.webhook_url.strip(),
         email_enabled=payload.email_enabled,
         email_to=payload.email_to.strip(),
+        throttle_window_minutes=payload.throttle_window_minutes,
+        max_notifications_per_window=payload.max_notifications_per_window,
+        quiet_hours_enabled=payload.quiet_hours_enabled,
+        quiet_hours_start=payload.quiet_hours_start.strip(),
+        quiet_hours_end=payload.quiet_hours_end.strip(),
+        dedupe_window_minutes=payload.dedupe_window_minutes,
     )
 
 
@@ -198,6 +260,63 @@ def notification_dispatches(limit: int = 50) -> dict[str, object]:
     if limit < 1:
         raise HTTPException(status_code=400, detail="limit must be >= 1")
     return {"dispatches": engine.notification_dispatches(limit=limit)}
+
+
+@router.get("/notifications/metrics")
+def notification_metrics(window_hours: int = 24) -> dict[str, object]:
+    if window_hours < 1 or window_hours > 168:
+        raise HTTPException(status_code=400, detail="window_hours must be between 1 and 168")
+    return engine.notification_metrics(window_hours=window_hours)
+
+
+@router.post("/notifications/test")
+def send_notification_test(payload: NotificationTestPayload) -> dict[str, object]:
+    return engine.send_test_notification(payload.message.strip())
+
+
+@router.get("/strategy/registry")
+def strategy_registry() -> dict[str, object]:
+    return {"strategies": engine.strategy_registry()}
+
+
+@router.get("/strategy/attribution")
+def strategy_attribution(limit: int = 200) -> dict[str, object]:
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    return {"attribution": engine.strategy_attribution(limit=limit)}
+
+
+@router.get("/strategy/model")
+def strategy_model_state() -> dict[str, object]:
+    return engine.strategy_model_state()
+
+
+@router.get("/strategy/model/versions")
+def strategy_model_versions(limit: int = 50) -> dict[str, object]:
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    return {"versions": engine.strategy_model_versions(limit=limit)}
+
+
+@router.post("/strategy/model/update")
+def strategy_model_update(payload: ModelUpdatePayload) -> dict[str, object]:
+    return engine.run_strategy_model_update(
+        reason=payload.reason.strip(),
+        min_samples_per_strategy=payload.min_samples_per_strategy,
+        max_delta_per_update=payload.max_delta_per_update,
+        lookback_limit=payload.lookback_limit,
+    )
+
+
+@router.post("/strategy/model/rollback")
+def strategy_model_rollback(payload: ModelRollbackPayload) -> dict[str, object]:
+    rolled = engine.rollback_strategy_model(
+        target_version_id=payload.target_version_id,
+        reason=payload.reason.strip(),
+    )
+    if not rolled:
+        raise HTTPException(status_code=404, detail="target version not found")
+    return rolled
 
 
 @router.get("/catalyst/schema")
@@ -224,6 +343,13 @@ def learning_spec() -> dict[str, object]:
 @router.post("/learning/score")
 def learning_score(sample: LearningSample) -> dict[str, float]:
     return score_learning_sample(sample)
+
+
+@router.get("/learning/events")
+def learning_events(limit: int = 100) -> dict[str, object]:
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    return {"events": engine.learning_events(limit=limit)}
 
 
 @router.get("/performance")
@@ -360,11 +486,20 @@ def dashboard() -> str:
                   <label>Webhook URL <input id="notify-webhook-url" type="text" placeholder="https://example.com/webhook"></label>
                   <label><span>Email Alerts</span><input id="notify-email-enabled" type="checkbox"></label>
                   <label>Email To <input id="notify-email-to" type="email" placeholder="you@example.com"></label>
+                  <label>Throttle Window (min) <input id="notify-throttle-window-minutes" type="number" min="1" max="240" step="1" value="10"></label>
+                  <label>Max Alerts / Window <input id="notify-max-per-window" type="number" min="1" max="50" step="1" value="3"></label>
+                  <label>Dedupe Window (min) <input id="notify-dedupe-window-minutes" type="number" min="1" max="240" step="1" value="20"></label>
+                  <label><span>Quiet Hours</span><input id="notify-quiet-hours-enabled" type="checkbox"></label>
+                  <label>Quiet Start (UTC) <input id="notify-quiet-start" type="time" value="22:00"></label>
+                  <label>Quiet End (UTC) <input id="notify-quiet-end" type="time" value="07:00"></label>
                   <div class="controls-actions">
                     <button type="submit">Save Channels</button>
+                    <button type="button" id="notification-send-test">Send Test Alert</button>
                   </div>
-                  <p id="notification-status" class="note">Channel settings update runtime alert routing.</p>
+                  <p id="notification-status" class="note">Channel settings update runtime alert routing, throttling, and quiet-hour suppression.</p>
                 </form>
+                <p id="notification-suppression-summary" class="note">Suppression summary: none in recent dispatch activity.</p>
+                <p id="notification-metrics-summary" class="note">24h dispatch metrics: no activity yet.</p>
                 <ul id="notification-feed" class="timeline compact"></ul>
                 <h3 class="drilldown-h3">Dispatch Activity</h3>
                 <ul id="dispatch-feed" class="timeline compact"></ul>
