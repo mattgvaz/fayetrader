@@ -1,11 +1,8 @@
 from app.api.routes import engine
-from app.main import app
 from app.services.engine import TradingEngine
-from fastapi.testclient import TestClient
 
 
-def test_strategy_model_state_endpoints_roundtrip() -> None:
-    client = TestClient(app)
+def test_strategy_model_state_endpoints_roundtrip(client) -> None:
     state = client.get("/api/strategy/model")
     assert state.status_code == 200
     current = state.json()
@@ -36,10 +33,7 @@ def test_strategy_model_state_endpoints_roundtrip() -> None:
     assert versions.status_code == 200
     items = versions.json()["versions"]
     assert len(items) >= 1
-
-
-def test_strategy_model_rollback_and_reload_uses_latest_scores() -> None:
-    client = TestClient(app)
+def test_strategy_model_rollback_and_reload_uses_latest_scores(client) -> None:
     base = client.get("/api/strategy/model").json()
     for _ in range(6):
         client.post("/api/run/AAPL")
@@ -70,6 +64,7 @@ def test_strategy_model_rollback_and_reload_uses_latest_scores() -> None:
     assert rolled["rollback_of_version_id"] == int(base["version_id"])
 
     fresh_engine = TradingEngine()
+    fresh_engine.reset(runtime_dir=engine.runtime_dir)
     fresh_state = fresh_engine.strategy_model_state()
     assert fresh_state["version_id"] == rolled["version_id"]
 

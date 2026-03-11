@@ -96,7 +96,7 @@ Acceptance criteria:
 - M5 exit gate passed: documented go/no-go decision on adopting multi-agent architecture for post-M5 work, with rationale and migration scope if approved.
 
 ### M6: Alpaca Paper Integrations (Week of 2026-04-13)
-Status: `in_progress`
+Status: `done`
 Owner: `unassigned`
 
 Deliverables:
@@ -109,7 +109,7 @@ Acceptance criteria:
 - Practice-mode guardrails prevent accidental live routing.
 
 ### M7: Hardening + Launch Readiness (Week of 2026-04-20)
-Status: `not_started`
+Status: `done`
 Owner: `unassigned`
 
 Deliverables:
@@ -168,6 +168,9 @@ Acceptance criteria:
 ## 6) Change Log
 - 2026-03-07: Initial living plan created with UX-first sequencing and strategy lab scope.
 - 2026-03-07: Added explicit per-trade learning feedback loop milestone and requirements.
+- 2026-03-10: Started M7 hardening work with adapter retry coverage, repo-root test harness, and operations runbook.
+- 2026-03-10: Added M7 soak-session coverage and documented performance/deprecation follow-ups for post-hardening cleanup.
+- 2026-03-10: Closed M7 with launch-readiness dry-run evidence, scope-freeze documentation, and test-client cleanup to prevent descriptor leaks during validation.
 - 2026-03-08: Added runtime-editable risk controls (API + dashboard), workflow-view tabs, and dedicated risk engine tests.
 - 2026-03-08: Added versioned engine event contract, event schema endpoint, and stream envelope parsing in dashboard client.
 - 2026-03-08: Added learning sample schema and scoring API endpoints for post-trade evaluation scaffolding.
@@ -193,3 +196,4 @@ Acceptance criteria:
 - 2026-03-09: Completed M4 with persistent run sessions + replay endpoints, decision audit trail persistence, SQLite-backed chat session/message durability (including content search), and learning-event persistence for closed trades.
 - 2026-03-09: Started M5 with persistent versioned strategy model state, guarded post-market update job (sample thresholds + capped deltas), rollback endpoint, and model-version-aware strategy selection.
 - 2026-03-09: Started M6 by adding Alpaca market-data and paper-broker adapters, adapter selection via environment config, adapter visibility endpoints, and live-mode safety guardrail defaults.
+- 2026-03-11: Completed M6 acceptance with Alpaca-backed health/adapter verification and successful paper order fill (`SPY` buy) through the Alpaca paper execution path.

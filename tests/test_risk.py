@@ -1,5 +1,4 @@
-from datetime import datetime
-
+from app.core.time import utc_now
 from app.models.types import AgentDecision, DecisionAction
 from app.services.portfolio import Portfolio
 from app.services.risk import RiskEngine
@@ -12,7 +11,7 @@ def _decision(action: DecisionAction, qty: int = 10) -> AgentDecision:
 def test_hold_is_allowed_without_risk_checks() -> None:
     risk = RiskEngine()
     portfolio = Portfolio(starting_cash=100_000, cash=100_000)
-    allowed, reason = risk.allow(_decision(DecisionAction.HOLD), portfolio, 100.0, datetime.utcnow())
+    allowed, reason = risk.allow(_decision(DecisionAction.HOLD), portfolio, 100.0, utc_now())
     assert allowed is True
     assert reason == "hold"
 
@@ -20,14 +19,14 @@ def test_hold_is_allowed_without_risk_checks() -> None:
 def test_buy_blocked_when_position_size_exceeds_limit() -> None:
     risk = RiskEngine()
     portfolio = Portfolio(starting_cash=100_000, cash=100_000)
-    allowed, reason = risk.allow(_decision(DecisionAction.BUY, qty=300), portfolio, 50.0, datetime.utcnow())
+    allowed, reason = risk.allow(_decision(DecisionAction.BUY, qty=300), portfolio, 50.0, utc_now())
     assert allowed is False
     assert reason == "max_position_size_exceeded"
 
 
 def test_buy_blocked_at_max_daily_loss() -> None:
     risk = RiskEngine()
-    now = datetime.utcnow()
+    now = utc_now()
     portfolio = Portfolio(starting_cash=100_000, cash=100_000, daily_realized={now.date(): -3_500.0})
     allowed, reason = risk.allow(_decision(DecisionAction.BUY, qty=1), portfolio, 100.0, now)
     assert allowed is False
@@ -43,7 +42,7 @@ def test_rate_limit_blocks_excess_orders_per_minute() -> None:
         max_orders_per_minute=2,
     )
     portfolio = Portfolio(starting_cash=100_000, cash=100_000)
-    now = datetime.utcnow()
+    now = utc_now()
     decision = _decision(DecisionAction.BUY, qty=1)
 
     first_allowed, _ = risk.allow(decision, portfolio, 100.0, now)

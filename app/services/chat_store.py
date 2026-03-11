@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,7 @@ class ChatStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -42,13 +43,13 @@ class ChatStore:
             conn.commit()
 
     def has_sessions(self) -> bool:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM chat_sessions").fetchone()
         return int((row["cnt"] if row else 0) or 0) > 0
 
     def create_session(self, *, title: str, created_at: str, updated_at: str) -> dict[str, object]:
         session_id = self._next_session_id()
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 "INSERT INTO chat_sessions (session_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (session_id, title, created_at, updated_at),
@@ -71,7 +72,7 @@ class ChatStore:
             like = f"%{q}%"
             params.extend([like, like])
         params.append(max(1, limit))
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 f"""
                 SELECT s.session_id, s.title, s.created_at, s.updated_at,
@@ -97,7 +98,7 @@ class ChatStore:
         ]
 
     def get_session(self, session_id: str) -> dict[str, object] | None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT session_id, title, created_at, updated_at FROM chat_sessions WHERE session_id = ?",
                 (session_id,),
@@ -125,7 +126,7 @@ class ChatStore:
         }
 
     def append_message(self, *, session_id: str, role: str, content: str, ts: str) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 "INSERT INTO chat_messages (session_id, role, content, ts) VALUES (?, ?, ?, ?)",
                 (session_id, role, content, ts),
@@ -134,12 +135,12 @@ class ChatStore:
             conn.commit()
 
     def update_title(self, *, session_id: str, title: str) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute("UPDATE chat_sessions SET title = ? WHERE session_id = ?", (title, session_id))
             conn.commit()
 
     def _next_session_id(self) -> str:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute("SELECT session_id FROM chat_sessions").fetchall()
         max_seq = 0
         for row in rows:

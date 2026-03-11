@@ -1,13 +1,10 @@
 from datetime import datetime, timedelta
 
-from fastapi.testclient import TestClient
-
 from app.api.routes import engine
-from app.main import app
+from app.core.time import utc_now
 
 
-def test_dashboard_page_loads() -> None:
-    client = TestClient(app)
+def test_dashboard_page_loads(client) -> None:
     res = client.get("/api/dashboard")
     assert res.status_code == 200
     assert "FayeTrader Dashboard" in res.text
@@ -55,15 +52,13 @@ def test_dashboard_page_loads() -> None:
     assert "Caps total capital the risk engine can allocate during this session." in res.text
 
 
-def test_root_redirects_to_dashboard() -> None:
-    client = TestClient(app)
+def test_root_redirects_to_dashboard(client) -> None:
     res = client.get("/", follow_redirects=False)
     assert res.status_code == 307
     assert res.headers["location"] == "/api/dashboard"
 
 
-def test_state_payload_shape() -> None:
-    client = TestClient(app)
+def test_state_payload_shape(client) -> None:
     res = client.get("/api/state")
     assert res.status_code == 200
     body = res.json()
@@ -79,14 +74,12 @@ def test_state_payload_shape() -> None:
     assert "strategy_attribution" in body
 
 
-def test_stream_endpoint_validates_interval() -> None:
-    client = TestClient(app)
+def test_stream_endpoint_validates_interval(client) -> None:
     res = client.get("/api/stream?interval_ms=100")
     assert res.status_code == 400
 
 
-def test_event_schema_endpoint() -> None:
-    client = TestClient(app)
+def test_event_schema_endpoint(client) -> None:
     res = client.get("/api/event-schema")
     assert res.status_code == 200
     body = res.json()
@@ -97,8 +90,7 @@ def test_event_schema_endpoint() -> None:
     assert "properties" in body["schema"]
 
 
-def test_catalyst_schema_endpoint() -> None:
-    client = TestClient(app)
+def test_catalyst_schema_endpoint(client) -> None:
     res = client.get("/api/catalyst/schema")
     assert res.status_code == 200
     body = res.json()
@@ -106,8 +98,7 @@ def test_catalyst_schema_endpoint() -> None:
     assert "properties" in body["schema"]
 
 
-def test_catalyst_feed_endpoint() -> None:
-    client = TestClient(app)
+def test_catalyst_feed_endpoint(client) -> None:
     res = client.get("/api/catalyst/feed?limit=3")
     assert res.status_code == 200
     body = res.json()
@@ -124,9 +115,8 @@ def test_engine_snapshot_event_envelope_shape() -> None:
     assert "metrics" in payload["data"]
 
 
-def test_recent_events_endpoint() -> None:
+def test_recent_events_endpoint(client) -> None:
     engine.generate_live_events()
-    client = TestClient(app)
     res = client.get("/api/events/recent?limit=10")
     assert res.status_code == 200
     body = res.json()
@@ -134,8 +124,7 @@ def test_recent_events_endpoint() -> None:
     assert len(body["events"]) >= 1
 
 
-def test_sessions_and_replay_endpoints() -> None:
-    client = TestClient(app)
+def test_sessions_and_replay_endpoints(client) -> None:
     engine.generate_live_events()
     sessions_res = client.get("/api/sessions?limit=10")
     assert sessions_res.status_code == 200
@@ -149,8 +138,7 @@ def test_sessions_and_replay_endpoints() -> None:
     assert "events" in body
 
 
-def test_decision_audit_endpoint() -> None:
-    client = TestClient(app)
+def test_decision_audit_endpoint(client) -> None:
     client.post("/api/run/AAPL")
     res = client.get("/api/decisions/audit?limit=50")
     assert res.status_code == 200
@@ -162,8 +150,7 @@ def test_decision_audit_endpoint() -> None:
     assert "strategy_id" in sample
 
 
-def test_opportunity_controls_roundtrip() -> None:
-    client = TestClient(app)
+def test_opportunity_controls_roundtrip(client) -> None:
     put_res = client.put("/api/opportunity-controls", json={"threshold": 1.75})
     assert put_res.status_code == 200
     assert put_res.json()["threshold"] == 1.75
@@ -172,8 +159,7 @@ def test_opportunity_controls_roundtrip() -> None:
     assert get_res.json()["threshold"] == 1.75
 
 
-def test_notification_channel_controls_roundtrip() -> None:
-    client = TestClient(app)
+def test_notification_channel_controls_roundtrip(client) -> None:
     payload = {
         "in_app_enabled": True,
         "webhook_enabled": True,
@@ -202,8 +188,7 @@ def test_notification_channel_controls_roundtrip() -> None:
     assert get_res.json()["quiet_hours_end"] == "06:30"
 
 
-def test_notification_ack_and_snooze_flow() -> None:
-    client = TestClient(app)
+def test_notification_ack_and_snooze_flow(client) -> None:
     client.put(
         "/api/notifications/channels",
         json={
@@ -220,13 +205,13 @@ def test_notification_ack_and_snooze_flow() -> None:
             "quiet_hours_end": "07:00",
         },
     )
-    symbol = f"TEST{int(datetime.utcnow().timestamp() * 1_000_000)}"
+    symbol = f"TEST{int(utc_now().timestamp() * 1_000_000)}"
     engine.notification_center.create_hot_opportunity(
         symbol=symbol,
         score=2.2,
         threshold=1.5,
         thesis="Test notification for ack/snooze flow.",
-        ts=datetime.utcnow() + timedelta(days=30),
+        ts=utc_now() + timedelta(days=30),
     )
     listed = client.get("/api/notifications?limit=5")
     assert listed.status_code == 200
@@ -247,8 +232,7 @@ def test_notification_ack_and_snooze_flow() -> None:
     assert ack.json()["acknowledged"] is True
 
 
-def test_notification_metrics_endpoint_shape() -> None:
-    client = TestClient(app)
+def test_notification_metrics_endpoint_shape(client) -> None:
     res = client.get("/api/notifications/metrics?window_hours=24")
     assert res.status_code == 200
     body = res.json()
@@ -257,8 +241,7 @@ def test_notification_metrics_endpoint_shape() -> None:
     assert "suppressed_total" in body
 
 
-def test_notification_test_endpoint_creates_notification() -> None:
-    client = TestClient(app)
+def test_notification_test_endpoint_creates_notification(client) -> None:
     payload = {"message": "API test alert"}
     res = client.post("/api/notifications/test", json=payload)
     assert res.status_code == 200
@@ -267,8 +250,7 @@ def test_notification_test_endpoint_creates_notification() -> None:
     assert "notification_id" in body
 
 
-def test_strategy_registry_endpoint() -> None:
-    client = TestClient(app)
+def test_strategy_registry_endpoint(client) -> None:
     res = client.get("/api/strategy/registry")
     assert res.status_code == 200
     body = res.json()
@@ -276,8 +258,7 @@ def test_strategy_registry_endpoint() -> None:
     assert len(body["strategies"]) >= 2
 
 
-def test_strategy_attribution_endpoint() -> None:
-    client = TestClient(app)
+def test_strategy_attribution_endpoint(client) -> None:
     for symbol in ["AAPL", "MSFT", "SPY", "AAPL", "SPY"]:
         client.post(f"/api/run/{symbol}")
     res = client.get("/api/strategy/attribution?limit=200")
@@ -293,8 +274,7 @@ def test_strategy_attribution_endpoint() -> None:
     assert len(active_variants) >= 1
 
 
-def test_controls_update_roundtrip() -> None:
-    client = TestClient(app)
+def test_controls_update_roundtrip(client) -> None:
     payload = {
         "daily_budget": 85_000,
         "max_daily_loss_pct": 0.02,
@@ -311,8 +291,7 @@ def test_controls_update_roundtrip() -> None:
     assert controls.json() == payload
 
 
-def test_performance_endpoint() -> None:
-    client = TestClient(app)
+def test_performance_endpoint(client) -> None:
     res = client.get("/api/performance?range_key=this_month")
     assert res.status_code == 200
     body = res.json()
@@ -320,14 +299,12 @@ def test_performance_endpoint() -> None:
     assert "insights" in body
 
 
-def test_performance_custom_range_validation() -> None:
-    client = TestClient(app)
+def test_performance_custom_range_validation(client) -> None:
     res = client.get("/api/performance?range_key=custom")
     assert res.status_code == 400
 
 
-def test_chat_add_target_flow() -> None:
-    client = TestClient(app)
+def test_chat_add_target_flow(client) -> None:
     res = client.post("/api/chat", json={"message": "add target NVDA"})
     assert res.status_code == 200
     body = res.json()
@@ -338,8 +315,7 @@ def test_chat_add_target_flow() -> None:
     assert "NVDA" in state["manual_research_targets"]
 
 
-def test_chat_summary_flow() -> None:
-    client = TestClient(app)
+def test_chat_summary_flow(client) -> None:
     res = client.post("/api/chat", json={"message": "summarize day"})
     assert res.status_code == 200
     body = res.json()
@@ -347,8 +323,7 @@ def test_chat_summary_flow() -> None:
     assert "Today so far:" in body["reply"]
 
 
-def test_chat_session_endpoints() -> None:
-    client = TestClient(app)
+def test_chat_session_endpoints(client) -> None:
     created = client.post("/api/chat/sessions")
     assert created.status_code == 200
     session = created.json()
@@ -363,8 +338,7 @@ def test_chat_session_endpoints() -> None:
     assert fetched.json()["session_id"] == session_id
 
 
-def test_chat_session_search_matches_message_content() -> None:
-    client = TestClient(app)
+def test_chat_session_search_matches_message_content(client) -> None:
     created = client.post("/api/chat/sessions", params={"title": "Ops Chat"})
     assert created.status_code == 200
     session_id = created.json()["session_id"]

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
+from app.core.time import utc_now
 from app.models.catalyst import CatalystEvent, CatalystImpact, CatalystImpactDirection, CatalystTheme
 
 
 class CatalystFeedAdapter:
     def latest_events(self) -> list[CatalystEvent]:
-        now = datetime.utcnow()
+        now = utc_now()
         return [
             CatalystEvent(
                 event_id="evt-ai-model-launch-001",

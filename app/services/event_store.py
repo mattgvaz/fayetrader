@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ class EventStore:
         return sqlite3.connect(str(self.db_path))
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS run_sessions (
@@ -63,7 +64,7 @@ class EventStore:
             conn.execute("ALTER TABLE engine_events ADD COLUMN session_id TEXT NOT NULL DEFAULT ''")
 
     def create_session(self, session_id: str, started_at: str) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO run_sessions (session_id, started_at) VALUES (?, ?)",
                 (session_id, started_at),
@@ -72,7 +73,7 @@ class EventStore:
 
     def append(self, event: EngineEvent, *, session_id: str) -> None:
         payload = json.dumps(event.model_dump(mode="json"))
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO engine_events (session_id, ts, event_type, schema_version, payload)
@@ -85,7 +86,7 @@ class EventStore:
     def recent(self, limit: int = 100) -> list[dict[str, Any]]:
         if limit < 1:
             return []
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT payload
@@ -105,7 +106,7 @@ class EventStore:
         return events
 
     def list_sessions(self, limit: int = 30) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT s.session_id, s.started_at, COUNT(e.id) AS event_count
@@ -127,7 +128,7 @@ class EventStore:
         ]
 
     def replay_session(self, session_id: str, limit: int = 500) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT payload
@@ -154,7 +155,7 @@ class EventStore:
         strategy_id = str(record.get("strategy_id", ""))
         strategy_variant = str(record.get("strategy_variant", ""))
         payload = json.dumps(record)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO decision_audit (
@@ -172,7 +173,7 @@ class EventStore:
             where = "WHERE session_id = ?"
             params.append(session_id)
         params.append(max(1, limit))
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 f"""
                 SELECT payload
