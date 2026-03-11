@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.parse
 import urllib.request
-from datetime import datetime
 
+from app.core.time import utc_now
 from app.models.types import MarketTick
 
 
@@ -16,11 +17,15 @@ class AlpacaMarketDataAdapter:
         api_secret: str,
         base_url: str = "https://data.alpaca.markets",
         timeout_seconds: float = 3.0,
+        max_retries: int = 2,
+        retry_backoff_seconds: float = 0.25,
     ) -> None:
         self.api_key_id = api_key_id.strip()
         self.api_secret = api_secret.strip()
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = max(0.1, float(timeout_seconds))
+        self.max_retries = max(0, int(max_retries))
+        self.retry_backoff_seconds = max(0.0, float(retry_backoff_seconds))
         self._fallback_prices: dict[str, float] = {
             "AAPL": 190.0,
             "MSFT": 420.0,
@@ -31,7 +36,7 @@ class AlpacaMarketDataAdapter:
         ticker = symbol.upper().strip()
         price = self._fetch_latest_price(ticker) if self._has_credentials() else self._fallback_prices.get(ticker, 100.0)
         self._fallback_prices[ticker] = price
-        return MarketTick(symbol=ticker, price=price, ts=datetime.utcnow())
+        return MarketTick(symbol=ticker, price=price, ts=utc_now())
 
     def snapshot(self, symbols: list[str]) -> dict[str, float]:
         return {s: self.latest(s).price for s in symbols}
@@ -50,13 +55,23 @@ class AlpacaMarketDataAdapter:
                 "Accept": "application/json",
             },
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception:  # noqa: BLE001
+        payload = self._request_json_with_retries(request)
+        if payload is None:
             return self._fallback_prices.get(symbol, 100.0)
         trade = payload.get("trade") if isinstance(payload, dict) else {}
         try:
             return float(trade.get("p"))
         except Exception:  # noqa: BLE001
             return self._fallback_prices.get(symbol, 100.0)
+
+    def _request_json_with_retries(self, request: urllib.request.Request) -> object | None:
+        for attempt in range(self.max_retries + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310
+                    return json.loads(response.read().decode("utf-8"))
+            except Exception:  # noqa: BLE001
+                if attempt >= self.max_retries:
+                    break
+                if self.retry_backoff_seconds > 0:
+                    time.sleep(self.retry_backoff_seconds * (attempt + 1))
+        return None

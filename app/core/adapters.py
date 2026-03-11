@@ -13,6 +13,9 @@ def select_market_data_adapter() -> tuple[object, str]:
             api_key_id=settings.alpaca_api_key_id,
             api_secret=settings.alpaca_api_secret,
             base_url=settings.alpaca_data_base_url,
+            timeout_seconds=settings.alpaca_data_timeout_seconds,
+            max_retries=settings.alpaca_request_max_retries,
+            retry_backoff_seconds=settings.alpaca_retry_backoff_seconds,
         )
         return adapter, "alpaca"
     return MarketDataAdapter(), "mock"
@@ -26,6 +29,9 @@ def select_broker_adapter() -> tuple[object, str]:
             api_key_id=settings.alpaca_api_key_id,
             api_secret=settings.alpaca_api_secret,
             base_url=settings.alpaca_trading_base_url,
+            timeout_seconds=settings.alpaca_trading_timeout_seconds,
+            max_retries=settings.alpaca_request_max_retries,
+            retry_backoff_seconds=settings.alpaca_retry_backoff_seconds,
         )
         return adapter, "alpaca_paper"
     return PaperBroker(), "paper"

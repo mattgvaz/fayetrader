@@ -1,6 +1,6 @@
 # FayeTrader Project Memory (Charter)
 
-Last updated: 2026-03-08
+Last updated: 2026-03-10
 
 ## Vision
 Build an app where the user supervises an AI day-trading agent that researches off-hours and trades autonomously during market hours, starting in paper/practice mode.
@@ -70,3 +70,7 @@ Build an app where the user supervises an AI day-trading agent that researches o
 - This file and `docs/BUILD_PLAN.md` are the source of truth.
 - Update both files when scope or priorities change.
 - Prefer small iterative milestones with explicit acceptance criteria.
+
+## Current Program State
+- M7 hardening and launch-readiness work is complete for practice/paper mode.
+- Timestamp handling is timezone-aware in the current codebase, and the test harness now isolates runtime state with clean resource shutdown.

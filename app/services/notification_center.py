@@ -4,11 +4,13 @@ import sqlite3
 import time
 import urllib.error
 import urllib.request
+from contextlib import closing
 from json import dumps as json_dumps
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.core.time import utc_now
 
 class NotificationCenter:
     def __init__(
@@ -32,7 +34,7 @@ class NotificationCenter:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS notifications (
@@ -104,7 +106,7 @@ class NotificationCenter:
             conn.execute("ALTER TABLE channel_settings ADD COLUMN dedupe_window_minutes INTEGER NOT NULL DEFAULT 20")
 
     def channels(self) -> dict[str, Any]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute("SELECT * FROM channel_settings WHERE id = 1").fetchone()
         if row is None:
             return {
@@ -151,7 +153,7 @@ class NotificationCenter:
     ) -> dict[str, Any]:
         quiet_start = self._normalize_hhmm(quiet_hours_start)
         quiet_end = self._normalize_hhmm(quiet_hours_end)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 UPDATE channel_settings
@@ -188,7 +190,7 @@ class NotificationCenter:
     ) -> dict[str, Any]:
         title = f"Hot opportunity: {symbol}"
         body = f"Score {score:.2f} crossed threshold {threshold:.2f}. {thesis}"
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             settings = self.channels()
             if settings["quiet_hours_enabled"] and self._is_quiet_hours_active(
                 ts,
@@ -258,7 +260,7 @@ class NotificationCenter:
 
     def create_test_alert(self, *, message: str, ts: datetime) -> dict[str, Any]:
         clean_message = str(message or "").strip() or "Notification channel test from FayeTrader."
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             cur = conn.execute(
                 """
                 INSERT INTO notifications (created_at, kind, symbol, title, body, score, threshold, acknowledged, snoozed_until)
@@ -274,7 +276,7 @@ class NotificationCenter:
         return self.get_notification(self._public_id(notif_id)) or {}
 
     def list_notifications(self, limit: int = 50, include_acknowledged: bool = False) -> list[dict[str, Any]]:
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = utc_now().isoformat()
         where_parts: list[str] = []
         params: list[Any] = []
         if not include_acknowledged:
@@ -290,7 +292,7 @@ class NotificationCenter:
             LIMIT ?
         """
         params.append(limit)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(query, params).fetchall()
         return [self._row_to_notification(row) for row in rows]
 
@@ -298,7 +300,7 @@ class NotificationCenter:
         parsed = self._parse_id(notification_id)
         if parsed is None:
             return None
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute("SELECT * FROM notifications WHERE id = ?", (parsed,)).fetchone()
         return self._row_to_notification(row) if row else None
 
@@ -306,7 +308,7 @@ class NotificationCenter:
         parsed = self._parse_id(notification_id)
         if parsed is None:
             return None
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute("UPDATE notifications SET acknowledged = 1 WHERE id = ?", (parsed,))
             conn.commit()
         return self.get_notification(notification_id)
@@ -315,14 +317,14 @@ class NotificationCenter:
         parsed = self._parse_id(notification_id)
         if parsed is None:
             return None
-        until = (datetime.utcnow() + timedelta(minutes=max(1, minutes))).isoformat()
-        with self._connect() as conn:
+        until = (utc_now() + timedelta(minutes=max(1, minutes))).isoformat()
+        with closing(self._connect()) as conn:
             conn.execute("UPDATE notifications SET snoozed_until = ? WHERE id = ?", (until, parsed))
             conn.commit()
         return self.get_notification(notification_id)
 
     def recent_dispatches(self, limit: int = 50) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT notification_id, channel, status, detail, ts
@@ -345,8 +347,8 @@ class NotificationCenter:
 
     def metrics(self, window_hours: int = 24) -> dict[str, Any]:
         hours = max(1, int(window_hours))
-        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
-        with self._connect() as conn:
+        cutoff = (utc_now() - timedelta(hours=hours)).isoformat()
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT status, COUNT(*) AS cnt

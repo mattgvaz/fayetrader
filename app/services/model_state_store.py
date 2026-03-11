@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ class ModelStateStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS model_versions (
@@ -50,7 +51,7 @@ class ModelStateStore:
         )
 
     def latest(self) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute(
                 """
                 SELECT version_id, created_at, reason, from_version_id, rollback_of_version_id, sample_count, payload_json, diagnostics_json
@@ -62,7 +63,7 @@ class ModelStateStore:
         return self._row_to_version(row) if row else None
 
     def list_versions(self, limit: int = 50) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT version_id, created_at, reason, from_version_id, rollback_of_version_id, sample_count, payload_json, diagnostics_json
@@ -75,7 +76,7 @@ class ModelStateStore:
         return [self._row_to_version(row) for row in rows]
 
     def get_version(self, version_id: int) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute(
                 """
                 SELECT version_id, created_at, reason, from_version_id, rollback_of_version_id, sample_count, payload_json, diagnostics_json
@@ -99,7 +100,7 @@ class ModelStateStore:
     ) -> dict[str, Any]:
         payload = json.dumps({"strategy_scores": scores}, sort_keys=True)
         diagnostics_payload = json.dumps(diagnostics, sort_keys=True)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             cur = conn.execute(
                 """
                 INSERT INTO model_versions (

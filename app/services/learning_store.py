@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ class LearningStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS learning_events (
@@ -40,7 +41,7 @@ class LearningStore:
             conn.commit()
 
     def append(self, event: dict[str, Any]) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO learning_events (
@@ -65,7 +66,7 @@ class LearningStore:
             conn.commit()
 
     def recent(self, limit: int = 100) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT ts, trade_id, symbol, strategy_id, strategy_variant, regime,

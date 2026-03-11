@@ -1,12 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from fastapi.testclient import TestClient
+from app.core.time import utc_now
 
-from app.main import app
-
-
-def test_learning_spec_endpoint() -> None:
-    client = TestClient(app)
+def test_learning_spec_endpoint(client) -> None:
     res = client.get("/api/learning/spec")
     assert res.status_code == 200
     body = res.json()
@@ -15,9 +11,8 @@ def test_learning_spec_endpoint() -> None:
     assert "trade_id" in body["sample_schema"]["properties"]
 
 
-def test_learning_score_endpoint() -> None:
-    client = TestClient(app)
-    opened_at = datetime.utcnow()
+def test_learning_score_endpoint(client) -> None:
+    opened_at = utc_now()
     payload = {
         "trade_id": "t-001",
         "strategy_id": "mean_reversion_v1",
@@ -42,8 +37,7 @@ def test_learning_score_endpoint() -> None:
     assert 0 <= body["score"] <= 1
 
 
-def test_learning_events_endpoint_shape() -> None:
-    client = TestClient(app)
+def test_learning_events_endpoint_shape(client) -> None:
     for _ in range(3):
         client.post("/api/run/AAPL")
         client.post("/api/run/MSFT")

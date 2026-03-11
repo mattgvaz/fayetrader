@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 from app.core.adapters import select_broker_adapter, select_market_data_adapter
 from app.core.config import settings
+from app.core.time import utc_now
 from app.data.catalyst import CatalystFeedAdapter
 from app.models.catalyst import CatalystEvent
 from app.models.events import EngineEvent, EngineEventType
@@ -22,11 +24,16 @@ from app.services.strategy_lab import StrategyLab
 
 class TradingEngine:
     def __init__(self) -> None:
+        self.runtime_dir: Path | None = None
+        self.catalysts = CatalystFeedAdapter()
+        self.risk = RiskEngine()
+        self.reset()
+
+    def reset(self, *, runtime_dir: str | Path | None = None) -> None:
+        self.runtime_dir = Path(runtime_dir) if runtime_dir else None
         market_adapter, market_label = select_market_data_adapter()
         self.market = market_adapter
         self.market_adapter_label = market_label
-        self.catalysts = CatalystFeedAdapter()
-        self.risk = RiskEngine()
         broker_adapter, broker_label = select_broker_adapter()
         self.broker = broker_adapter
         self.broker_adapter_label = broker_label
@@ -35,25 +42,25 @@ class TradingEngine:
         self.decision_log: list[dict[str, str | float | int]] = []
         self.performance_log: list[dict[str, str | float | int]] = []
         self.event_log: list[EngineEvent] = []
-        self.session_id = f"run-{datetime.utcnow():%Y%m%d-%H%M%S}"
-        self.event_store = EventStore()
-        self.event_store.create_session(self.session_id, datetime.utcnow().isoformat())
-        self.notification_center = NotificationCenter()
-        self.learning_store = LearningStore()
-        self.model_state_store = ModelStateStore()
-        self.chat_store = ChatStore()
+        self.session_id = f"run-{utc_now():%Y%m%d-%H%M%S}"
+        self.event_store = EventStore(self._runtime_path("runtime_events.db"))
+        self.event_store.create_session(self.session_id, utc_now().isoformat())
+        self.notification_center = NotificationCenter(self._runtime_path("runtime_notifications.db"))
+        self.learning_store = LearningStore(self._runtime_path("runtime_learning.db"))
+        self.model_state_store = ModelStateStore(self._runtime_path("runtime_model_state.db"))
+        self.chat_store = ChatStore(self._runtime_path("runtime_chat.db"))
         self.strategy_lab = StrategyLab()
         self.manual_research_targets: list[str] = []
         self._stream_symbol_idx = 0
         self.hot_opportunity_threshold = 1.25
         self._last_hot_alert_by_symbol: dict[str, datetime] = {}
         self._load_or_init_model_state()
-        self._record_performance(datetime.utcnow())
+        self._record_performance(utc_now())
         if not self.chat_store.has_sessions():
             self.create_chat_session(title="Session 1")
 
     def run_once(self, symbol: str) -> dict[str, str | float | int]:
-        now = datetime.utcnow()
+        now = utc_now()
         tick = self.market.latest(symbol)
         assignment = self.strategy_lab.assign(symbol=symbol, ts=now)
         current_qty = int(self.portfolio.positions.get(symbol).qty if symbol in self.portfolio.positions else 0)
@@ -160,7 +167,7 @@ class TradingEngine:
             "positions": open_positions,
             "recent_decisions": self.decision_log[-decision_limit:],
             "research_targets": self.research_targets(marks),
-            "research_updated_at": datetime.utcnow().isoformat(),
+            "research_updated_at": utc_now().isoformat(),
             "manual_research_targets": self.manual_research_targets,
             "catalyst_events": [event.model_dump(mode="json") for event in catalyst_events],
             "catalyst_impacts": self.catalyst_impacts(catalyst_events),
@@ -239,7 +246,7 @@ class TradingEngine:
         return self.notification_center.metrics(window_hours=window_hours)
 
     def send_test_notification(self, message: str) -> dict[str, Any]:
-        return self.notification_center.create_test_alert(message=message, ts=datetime.utcnow())
+        return self.notification_center.create_test_alert(message=message, ts=utc_now())
 
     def strategy_registry(self) -> list[dict[str, str]]:
         return self.strategy_lab.registry()
@@ -264,7 +271,7 @@ class TradingEngine:
         max_delta_per_update: float = 0.08,
         lookback_limit: int = 500,
     ) -> dict[str, Any]:
-        now = datetime.utcnow().isoformat()
+        now = utc_now().isoformat()
         current = self.model_state_store.latest()
         if not current:
             current = self._load_or_init_model_state()
@@ -341,7 +348,7 @@ class TradingEngine:
         current = self.model_state_store.latest()
         if not target or not current:
             return None
-        now = datetime.utcnow().isoformat()
+        now = utc_now().isoformat()
         version = self.model_state_store.create_version(
             created_at=now,
             reason=reason or f"rollback_to_v{target_version_id}",
@@ -375,7 +382,7 @@ class TradingEngine:
     def snapshot_event(self, decision_limit: int = 25) -> EngineEvent:
         return EngineEvent(
             event_type=EngineEventType.STATE_SNAPSHOT,
-            ts=datetime.utcnow(),
+            ts=utc_now(),
             data=self.state(decision_limit=decision_limit),
         )
 
@@ -386,7 +393,7 @@ class TradingEngine:
         symbol = settings.symbol_universe[self._stream_symbol_idx % len(settings.symbol_universe)]
         self._stream_symbol_idx += 1
         record = self.run_once(symbol)
-        now = datetime.utcnow()
+        now = utc_now()
         events: list[EngineEvent] = []
         events.append(self._append_event(EngineEventType.DECISION, dict(record), ts=now))
         if str(record.get("status")) == "blocked":
@@ -622,7 +629,7 @@ class TradingEngine:
         )
 
     def create_chat_session(self, title: str | None = None) -> dict[str, object]:
-        now = datetime.utcnow().isoformat()
+        now = utc_now().isoformat()
         return self.chat_store.create_session(
             title=title or "Session",
             created_at=now,
@@ -646,12 +653,12 @@ class TradingEngine:
             else:
                 session = self.create_chat_session()
 
-        now = datetime.utcnow().isoformat()
+        now = utc_now().isoformat()
         session_id_value = str(session.get("session_id", ""))
         self.chat_store.append_message(session_id=session_id_value, role="user", content=message, ts=now)
 
         reply, actions = self._chat_reply(message)
-        assistant_ts = datetime.utcnow().isoformat()
+        assistant_ts = utc_now().isoformat()
         self.chat_store.append_message(session_id=session_id_value, role="assistant", content=reply, ts=assistant_ts)
         session = self.chat_store.get_session(session_id_value) or {}
         messages = session.get("messages", [])
@@ -681,7 +688,7 @@ class TradingEngine:
         )
 
     def _append_event(self, event_type: EngineEventType, data: dict[str, Any], ts: datetime | None = None) -> EngineEvent:
-        event = EngineEvent(event_type=event_type, ts=ts or datetime.utcnow(), data=data)
+        event = EngineEvent(event_type=event_type, ts=ts or utc_now(), data=data)
         self.event_log.append(event)
         if len(self.event_log) > 500:
             self.event_log = self.event_log[-500:]
@@ -689,7 +696,7 @@ class TradingEngine:
         return event
 
     def _load_or_init_model_state(self) -> dict[str, Any]:
-        now = datetime.utcnow().isoformat()
+        now = utc_now().isoformat()
         baseline_scores = {sid: 0.5 for sid in self.strategy_lab.strategy_ids()}
         version = self.model_state_store.ensure_baseline(created_at=now, scores=baseline_scores)
         self.strategy_lab.set_model_state(
@@ -709,7 +716,7 @@ class TradingEngine:
         realized_pnl = float(record.get("realized_pnl_delta", 0.0) or 0.0)
         notional = max(0.01, qty * fill_price)
         realized_return_pct = (realized_pnl / notional) * 100.0
-        ts = str(record.get("ts", datetime.utcnow().isoformat()))
+        ts = str(record.get("ts", utc_now().isoformat()))
         learning_event = {
             "ts": ts,
             "trade_id": f"{self.session_id}:{record.get('symbol', '')}:{ts}",
@@ -732,6 +739,12 @@ class TradingEngine:
             },
         }
         self.learning_store.append(learning_event)
+
+    def _runtime_path(self, filename: str) -> str:
+        if self.runtime_dir is None:
+            return f"app/data/{filename}"
+        self.runtime_dir.mkdir(parents=True, exist_ok=True)
+        return str(self.runtime_dir / filename)
 
     def performance(self, start_date: date, end_date: date) -> dict[str, object]:
         points: list[dict[str, str | float | int]] = []

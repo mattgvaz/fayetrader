@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.request
 from datetime import datetime
 
@@ -15,11 +16,15 @@ class AlpacaPaperBroker:
         api_secret: str,
         base_url: str = "https://paper-api.alpaca.markets",
         timeout_seconds: float = 4.0,
+        max_retries: int = 2,
+        retry_backoff_seconds: float = 0.25,
     ) -> None:
         self.api_key_id = api_key_id.strip()
         self.api_secret = api_secret.strip()
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = max(0.1, float(timeout_seconds))
+        self.max_retries = max(0, int(max_retries))
+        self.retry_backoff_seconds = max(0.0, float(retry_backoff_seconds))
 
     def submit_order(self, order: Order, mark_price: float, now: datetime) -> Fill:
         if not self._has_credentials():
@@ -43,10 +48,8 @@ class AlpacaPaperBroker:
                 "Accept": "application/json",
             },
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception:  # noqa: BLE001
+        payload = self._request_json_with_retries(request)
+        if payload is None:
             return self._fallback_fill(order=order, mark_price=mark_price, now=now)
         fill_price = self._extract_fill_price(payload, fallback=mark_price, side=order.side.value)
         return Fill(
@@ -90,3 +93,15 @@ class AlpacaPaperBroker:
         slippage_bps = 1
         slip = fallback * (slippage_bps / 10_000)
         return fallback + slip if side == "buy" else fallback - slip
+
+    def _request_json_with_retries(self, request: urllib.request.Request) -> object | None:
+        for attempt in range(self.max_retries + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310
+                    return json.loads(response.read().decode("utf-8"))
+            except Exception:  # noqa: BLE001
+                if attempt >= self.max_retries:
+                    break
+                if self.retry_backoff_seconds > 0:
+                    time.sleep(self.retry_backoff_seconds * (attempt + 1))
+        return None

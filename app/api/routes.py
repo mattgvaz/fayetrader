@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.time import utc_today
 from app.models.catalyst import CatalystEvent
 from app.models.events import EngineEvent, EngineEventType
 from app.models.learning import LearningSample
@@ -66,7 +67,7 @@ class ModelRollbackPayload(BaseModel):
 
 
 def _resolve_date_range(range_key: str, start_date: str | None, end_date: str | None) -> tuple[date, date]:
-    today = datetime.utcnow().date()
+    today = utc_today()
     if range_key == "this_week":
         return today - timedelta(days=today.weekday()), today
     if range_key == "this_month":

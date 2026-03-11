@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-
+from app.core.time import utc_now
 from app.models.types import MarketTick
 
 
@@ -15,7 +14,7 @@ class MarketDataAdapter:
 
     def latest(self, symbol: str) -> MarketTick:
         price = self._last.get(symbol, 100.0)
-        return MarketTick(symbol=symbol, price=price, ts=datetime.utcnow())
+        return MarketTick(symbol=symbol, price=price, ts=utc_now())
 
     def snapshot(self, symbols: list[str]) -> dict[str, float]:
         return {s: self.latest(s).price for s in symbols}
